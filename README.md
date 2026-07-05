@@ -92,47 +92,110 @@ The API will run on:
 http://localhost:3000
 ```
 
-## Roadmap
+### Phase 1: Backend API foundation
 
-### Phase 1: Backend foundation
+- [x] Create a Node.js and TypeScript API
+- [x] Add Express application structure
+- [x] Add health check endpoint
+- [x] Add job creation and retrieval endpoints
+- [x] Add in-memory job repository
+- [x] Add basic request validation
+- [x] Add API tests for health check and job endpoints
+- [ ] Add consistent error responses
+- [ ] Add example API requests and responses to the README
 
-- Node.js and TypeScript API
-- Job creation and retrieval
-- In-memory repository
-- Basic validation
-- Unit tests
+### Phase 2: Local quality and developer workflow
 
-### Phase 2: Event-driven processing
+- [ ] Add automated test script
+- [ ] Add TypeScript build check
+- [ ] Add linting and formatting
+- [ ] Add a local `.env.example` file if configuration is introduced
+- [ ] Document local development commands
+- [ ] Document the difference between development, test and production build commands
 
-- Add AWS SQS
-- Add worker service
-- Add retry and failure handling
-- Add dead-letter queue design
+### Phase 3: Docker and Linux runtime
 
-### Phase 3: Persistence
+- [ ] Add Dockerfile for the API
+- [ ] Add `.dockerignore`
+- [ ] Run the API locally in a container
+- [ ] Add Docker Compose for local development if useful
+- [ ] Document useful Docker commands
+- [ ] Add Linux/container troubleshooting notes
+- [ ] Confirm logs are written to stdout/stderr for container-friendly operation
 
-- Add DynamoDB job storage
-- Store job status and results
-- Add idempotency considerations
+### Phase 4: CI/CD foundation
 
-### Phase 4: Docker and Linux
+- [ ] Add GitHub Actions workflow
+- [ ] Run tests on pull requests
+- [ ] Run TypeScript build on pull requests
+- [ ] Add workflow status badge to README
+- [ ] Document the CI/CD pipeline
+- [ ] Add branch/PR workflow notes
 
-- Add Dockerfile
-- Add Docker Compose for local development
-- Add Linux troubleshooting notes
+### Phase 5: Application architecture documentation
 
-### Phase 5: Terraform and AWS
+- [ ] Add `docs/architecture.md`
+- [ ] Add `docs/trade-offs.md`
+- [ ] Add `docs/runbook.md`
+- [ ] Add architecture diagram
+- [ ] Add Architecture Decision Records under `docs/adr/`
+- [ ] Document expected production behaviour
+- [ ] Document failure scenarios and recovery approach
 
-- Provision AWS resources with Terraform
-- Deploy API and worker
-- Add CloudWatch logging
+### Phase 6: Event-driven processing design
 
-### Phase 6: CI/CD
+- [ ] Add queue abstraction in the application code
+- [ ] Add worker service structure
+- [ ] Move from synchronous job handling toward asynchronous processing
+- [ ] Add retry and failure-handling design
+- [ ] Add dead-letter queue design
+- [ ] Document why a queue is used for job processing
 
-- Add GitHub Actions workflow
-- Run tests and build on pull requests
+### Phase 7: AWS services integration
 
-### Phase 7: Kubernetes
+- [ ] Add AWS SQS for job messages
+- [ ] Add DynamoDB for job status and results
+- [ ] Add S3 for optional job outputs or artifacts
+- [ ] Add IAM permission considerations
+- [ ] Add idempotency considerations
+- [ ] Add local development strategy for AWS-dependent code
+- [ ] Document the AWS service choices and trade-offs
 
-- Add local Kubernetes manifests
-- Deploy API and worker using kind or minikube
+### Phase 8: Terraform infrastructure
+
+- [ ] Provision AWS resources with Terraform
+- [ ] Add Terraform for SQS
+- [ ] Add Terraform for DynamoDB
+- [ ] Add Terraform for IAM permissions
+- [ ] Add Terraform for CloudWatch log groups and alarms
+- [ ] Add variables and outputs
+- [ ] Document Terraform commands and state considerations
+- [ ] Document how the infrastructure would differ between dev and production
+
+### Phase 9: Observability and operations
+
+- [ ] Add structured application logging
+- [ ] Add request/job correlation IDs
+- [ ] Add CloudWatch logging design
+- [ ] Add CloudWatch alarm examples
+- [ ] Monitor failed jobs and dead-letter queue depth
+- [ ] Document useful operational queries
+- [ ] Add runbook steps for common failure scenarios
+- [ ] Document cost and reliability considerations
+
+### Phase 10: Deployment
+
+- [ ] Choose an AWS deployment target for the API
+- [ ] Deploy the API and worker
+- [ ] Connect deployed services to SQS and DynamoDB
+- [ ] Document deployment steps
+- [ ] Document rollback considerations
+- [ ] Add environment-specific configuration notes
+
+### Phase 11: Optional platform engineering extensions
+
+- [ ] Add reusable infrastructure modules
+- [ ] Add OpenTelemetry or vendor-neutral observability notes
+- [ ] Add local Kubernetes manifests only if useful
+- [ ] Add kind or minikube deployment only as a later learning exercise
+- [ ] Compare ECS, Lambda and Kubernetes as deployment options
