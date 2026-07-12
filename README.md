@@ -50,6 +50,14 @@ Logs / Metrics / Monitoring
 GET /health
 ```
 
+Example response:
+```json
+{
+  "status": "ok",
+  "service": "cloud-job-processor"
+}
+```
+
 ### Create job
 
 ```http
@@ -67,10 +75,41 @@ Example body:
 }
 ```
 
+Example response:
+```json
+{
+  "id": "generated-job-id",
+  "type": "CRAWL_URL",
+  "payload": {
+    "url": "https://example.com"
+  },
+  "status": "PENDING",
+  "createdAt": "2026-01-01T12:00:00.000Z",
+  "updatedAt": "2026-01-01T12:00:00.000Z"
+}
+```
+
 ### Get all jobs
 
 ```http
 GET /api/jobs
+```
+
+Example response:
+
+```json
+[
+  {
+    "id": "generated-job-id",
+    "type": "CRAWL_URL",
+    "payload": {
+      "url": "https://example.com"
+    },
+    "status": "PENDING",
+    "createdAt": "2026-01-01T12:00:00.000Z",
+    "updatedAt": "2026-01-01T12:00:00.000Z"
+  }
+]
 ```
 
 ### Get job by ID
@@ -79,6 +118,38 @@ GET /api/jobs
 GET /api/jobs/:id
 ```
 
+Example response:
+
+```json
+{
+  "id": "generated-job-id",
+  "type": "CRAWL_URL",
+  "payload": {
+    "url": "https://example.com"
+  },
+  "status": "PENDING",
+  "createdAt": "2026-01-01T12:00:00.000Z",
+  "updatedAt": "2026-01-01T12:00:00.000Z"
+}
+```
+
+### Error responses
+
+Example `404`
+
+```json
+{
+  "error": "Job not found"
+}
+```
+
+Example `400`
+
+```json
+{
+  "error": "Invalid request"
+}
+```
 ## Running locally
 
 ```bash
@@ -102,7 +173,7 @@ http://localhost:3000
 - [x] Add basic request validation
 - [x] Add API tests for health check and job endpoints
 - [x] Add consistent error responses
-- [ ] Add example API requests and responses to the README
+- [x] Add example API requests and responses to the README
 
 ### Phase 2: Local quality and developer workflow
 
