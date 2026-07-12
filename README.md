@@ -163,6 +163,16 @@ The API will run on:
 http://localhost:3000
 ```
 
+To execute unit tests, run:
+```text
+npm test
+```
+
+To check that the project builds:
+```text
+npm run build
+```
+NOTE - A correctly built `dist` directory will not contain unit tests
 ### Phase 1: Backend API foundation
 
 - [x] Create a Node.js and TypeScript API
@@ -177,8 +187,8 @@ http://localhost:3000
 
 ### Phase 2: Local quality and developer workflow
 
-- [ ] Add automated test script
-- [ ] Add TypeScript build check
+- [x] Add automated test script
+- [x] Add TypeScript build check
 - [ ] Add linting and formatting
 - [ ] Add a local `.env.example` file if configuration is introduced
 - [ ] Document local development commands
