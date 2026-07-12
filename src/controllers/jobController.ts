@@ -19,7 +19,7 @@ export class JobController {
       res.status(201).json(job);
     } catch (error) {
       res.status(400).json({
-        message: error instanceof Error ? error.message : "Invalid request"
+        error: error instanceof Error ? error.message : "Invalid request"
       });
     }
   };
@@ -28,7 +28,7 @@ export class JobController {
     const job = this.jobService.getJob(req.params.id);
 
     if (!job) {
-      res.status(404).json({ message: "Job not found" });
+      res.status(404).json({ error: "Job not found" });
       return;
     }
 

@@ -67,7 +67,7 @@ test('GET /api/jobs/:id should return the created job', async () => {
 test('GET /api/jobs/:id should return 404 for non-existent job', async () => {
     const response = await request(app).get('/api/jobs/non-existent-id');
     expect(response.status).toBe(404);
-    expect(response.body).toEqual({ message: 'Job not found' });
+    expect(response.body).toEqual({ error: 'Job not found' });
 });
 
 test('POST /api/jobs should return 400 for invalid request', async () => {
@@ -78,5 +78,5 @@ test('POST /api/jobs should return 400 for invalid request', async () => {
         payload: null,
     });
     expect(response.status).toBe(400);
-    expect(response.body).toEqual({ message: 'Job type is required' });
+    expect(response.body).toEqual({ error: 'Job type is required' });
 });

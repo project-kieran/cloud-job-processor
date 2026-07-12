@@ -101,7 +101,7 @@ http://localhost:3000
 - [x] Add in-memory job repository
 - [x] Add basic request validation
 - [x] Add API tests for health check and job endpoints
-- [ ] Add consistent error responses
+- [x] Add consistent error responses
 - [ ] Add example API requests and responses to the README
 
 ### Phase 2: Local quality and developer workflow
