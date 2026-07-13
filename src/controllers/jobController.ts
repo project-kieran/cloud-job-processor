@@ -9,11 +9,12 @@
 import { Request, Response } from "express";
 import { CreateJobRequest } from "../types/job";
 import { JobService } from "../services/jobService";
+import { ParamsDictionary } from "express-serve-static-core";
 
 export class JobController {
   constructor(private readonly jobService: JobService) {}
 
-  createJob = (req: Request<{}, {}, CreateJobRequest>, res: Response): void => {
+  createJob = (req: Request<ParamsDictionary, unknown, CreateJobRequest>, res: Response): void => {
     try {
       const job = this.jobService.createJob(req.body);
       res.status(201).json(job);
