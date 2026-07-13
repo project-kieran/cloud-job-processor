@@ -16,7 +16,7 @@ app.use(express.json());
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
-    service: "cloud-job-processor"
+    service: "cloud-job-processor",
   });
 });
 

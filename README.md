@@ -51,6 +51,7 @@ GET /health
 ```
 
 Example response:
+
 ```json
 {
   "status": "ok",
@@ -76,6 +77,7 @@ Example body:
 ```
 
 Example response:
+
 ```json
 {
   "id": "generated-job-id",
@@ -150,6 +152,7 @@ Example `400`
   "error": "Invalid request"
 }
 ```
+
 ## Running locally
 
 ```bash
@@ -164,15 +167,19 @@ http://localhost:3000
 ```
 
 To execute unit tests, run:
+
 ```text
 npm test
 ```
 
 To check that the project builds:
+
 ```text
 npm run build
 ```
+
 NOTE - A correctly built `dist` directory will not contain unit tests
+
 ### Phase 1: Backend API foundation
 
 - [x] Create a Node.js and TypeScript API
@@ -189,7 +196,7 @@ NOTE - A correctly built `dist` directory will not contain unit tests
 
 - [x] Add automated test script
 - [x] Add TypeScript build check
-- [ ] Add linting and formatting
+- [x] Add linting and formatting
 - [ ] Add a local `.env.example` file if configuration is introduced
 - [ ] Document local development commands
 - [ ] Document the difference between development, test and production build commands

@@ -32,7 +32,7 @@ export class JobService {
       payload: request.payload,
       status: "PENDING",
       createdAt: now,
-      updatedAt: now
+      updatedAt: now,
     };
 
     return this.jobRepository.create(job);
