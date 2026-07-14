@@ -197,7 +197,7 @@ NOTE - A correctly built `dist` directory will not contain unit tests
 - [x] Add automated test script
 - [x] Add TypeScript build check
 - [x] Add linting and formatting
-- [ ] Add a local `.env.example` file if configuration is introduced
+- [x] Add a local `.env.example` file if configuration is introduced
 - [ ] Document local development commands
 - [ ] Document the difference between development, test and production build commands
 
