@@ -155,6 +155,8 @@ Example `400`
 
 ## Running locally
 
+To run the development server:
+
 ```bash
 npm install
 npm run dev
@@ -172,7 +174,7 @@ To execute unit tests, run:
 npm test
 ```
 
-To check that the project builds:
+To check that the build succeeds:
 
 ```text
 npm run build
@@ -198,8 +200,8 @@ NOTE - A correctly built `dist` directory will not contain unit tests
 - [x] Add TypeScript build check
 - [x] Add linting and formatting
 - [x] Add a local `.env.example` file if configuration is introduced
-- [ ] Document local development commands
-- [ ] Document the difference between development, test and production build commands
+- [x] Document local development commands
+- [x] Document the difference between development, test and production build commands
 
 ### Phase 3: Docker and Linux runtime
 
