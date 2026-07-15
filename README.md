@@ -182,6 +182,16 @@ npm run build
 
 NOTE - A correctly built `dist` directory will not contain unit tests
 
+## Docker
+
+This project uses a multi-stage Docker build:
+
+- the dependencies stage installs dependencies from `package-lock.json`
+- the build stage compiles the TypeScript source into `dist/`
+- the runner stage installs production dependencies only
+- the final image runs the compiled app as a non-root user
+- the container includes a health check against `/health`
+
 ### Phase 1: Backend API foundation
 
 - [x] Create a Node.js and TypeScript API
@@ -205,9 +215,9 @@ NOTE - A correctly built `dist` directory will not contain unit tests
 
 ### Phase 3: Docker and Linux runtime
 
-- [ ] Add Dockerfile for the API
-- [ ] Add `.dockerignore`
-- [ ] Run the API locally in a container
+- [x] Add Dockerfile for the API
+- [x] Add `.dockerignore`
+- [x] Run the API locally in a container
 - [ ] Add Docker Compose for local development if useful
 - [ ] Document useful Docker commands
 - [ ] Add Linux/container troubleshooting notes
