@@ -192,6 +192,34 @@ This project uses a multi-stage Docker build:
 - the final image runs the compiled app as a non-root user
 - the container includes a health check against `/health`
 
+### Commands
+
+Build the container:
+```docker build -t cloud-job-processor .```
+
+Run the container:
+```docker run --rm -p 3000:3000 cloud-job-processor```
+
+Check the response:
+```curl -i http://localhost:3000/health```
+
+View running container(s):
+```docker ps```
+
+View logs:
+```docker log <container-id>```
+
+Stop container:
+```docker stop <container-id>```
+
+### Container Troubleshooting
+
+- If the container exits early, check the container logs with `docker logs <container-id>`. Note that if the container was ran with `--rm` then the log may be removed after exiting. Re-run the container without `--rm` to inspect the early exit
+- If port 3000 is showing as already in use, either stop the running process or map the container to a different local port e.g., `docker run -p 3001:3000 cloud-job-processor`. Change the test command to `curl -i http://localhost:3001/health`
+- If the health check fails, first confirm the container is running with `docker ps`. Then manually check the endpoint `curl -i http://localhost:3000/health` and if that fails, check the logs `docker logs <container-id>`
+- This app should run as the non-root user configured in the Dockerfile. For permission issues, check the user and permissions running the container with the command `docker run --rm cloud-job-processor sh -c "whoami && id && ls -la /app"`
+- If the build is using stale files, rebuild without using Docker's build cache `docker build --no-cache -t cloud-job-processor .`. Check that `.dockerignore` is not excluding files that the build requires  
+
 ### Phase 1: Backend API foundation
 
 - [x] Create a Node.js and TypeScript API
@@ -219,8 +247,8 @@ This project uses a multi-stage Docker build:
 - [x] Add `.dockerignore`
 - [x] Run the API locally in a container
 - [ ] Add Docker Compose for local development if useful
-- [ ] Document useful Docker commands
-- [ ] Add Linux/container troubleshooting notes
+- [x] Document useful Docker commands
+- [x] Add Linux/container troubleshooting notes
 - [ ] Confirm logs are written to stdout/stderr for container-friendly operation
 
 ### Phase 4: CI/CD foundation
