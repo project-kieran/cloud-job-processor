@@ -21,10 +21,12 @@ export class JobController {
     try {
       const job = this.jobService.createJob(req.body);
       res.status(201).json(job);
+      console.log("Job created:", job);
     } catch (error) {
       res.status(400).json({
         error: error instanceof Error ? error.message : "Invalid request",
       });
+      console.error("Error creating job:", error);
     }
   };
 
@@ -33,13 +35,16 @@ export class JobController {
 
     if (!job) {
       res.status(404).json({ error: "Job not found" });
+      console.error("Job not found:", req.params.id);
       return;
     }
 
+    console.log("Job retrieved:", job);
     res.json(job);
   };
 
   getJobs = (_req: Request, res: Response): void => {
+    console.log("Retrieving all jobs");
     res.json(this.jobService.getJobs());
   };
 }

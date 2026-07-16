@@ -246,10 +246,10 @@ Stop container:
 - [x] Add Dockerfile for the API
 - [x] Add `.dockerignore`
 - [x] Run the API locally in a container
-- [ ] Add Docker Compose for local development if useful
+- [ ] Add Docker Compose for local development once multiple services are introduced
 - [x] Document useful Docker commands
 - [x] Add Linux/container troubleshooting notes
-- [ ] Confirm logs are written to stdout/stderr for container-friendly operation
+- [ ] Confirm basic logs are written to stdout/stderr for container-friendly operation
 
 ### Phase 4: CI/CD foundation
 
