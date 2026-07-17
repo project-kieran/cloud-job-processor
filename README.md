@@ -249,13 +249,13 @@ Stop container:
 - [ ] Add Docker Compose for local development once multiple services are introduced
 - [x] Document useful Docker commands
 - [x] Add Linux/container troubleshooting notes
-- [ ] Confirm basic logs are written to stdout/stderr for container-friendly operation
+- [x] Confirm basic logs are written to stdout/stderr for container-friendly operation
 
 ### Phase 4: CI/CD foundation
 
-- [ ] Add GitHub Actions workflow
-- [ ] Run tests on pull requests
-- [ ] Run TypeScript build on pull requests
+- [x] Add GitHub Actions workflow
+- [x] Run tests on pull requests
+- [x] Run TypeScript build on pull requests
 - [ ] Add workflow status badge to README
 - [ ] Document the CI/CD pipeline
 - [ ] Add branch/PR workflow notes
