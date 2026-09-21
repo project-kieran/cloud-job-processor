@@ -1,4 +1,5 @@
 # Cloud Job Processor
+![CI](https://github.com/project-kieran/cloud-job-processor/actions/workflows/ci.yml/badge.svg)
 
 A cloud-native job processing platform built to demonstrate backend API development, asynchronous processing patterns, AWS architecture, infrastructure as code, containerisation and deployment practices.
 
@@ -256,7 +257,7 @@ Stop container:
 - [x] Add GitHub Actions workflow
 - [x] Run tests on pull requests
 - [x] Run TypeScript build on pull requests
-- [ ] Add workflow status badge to README
+- [x] Add workflow status badge to README
 - [ ] Document the CI/CD pipeline
 - [ ] Add branch/PR workflow notes
 
