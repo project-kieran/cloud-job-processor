@@ -219,7 +219,15 @@ Stop container:
 - If port 3000 is showing as already in use, either stop the running process or map the container to a different local port e.g., `docker run -p 3001:3000 cloud-job-processor`. Change the test command to `curl -i http://localhost:3001/health`
 - If the health check fails, first confirm the container is running with `docker ps`. Then manually check the endpoint `curl -i http://localhost:3000/health` and if that fails, check the logs `docker logs <container-id>`
 - This app should run as the non-root user configured in the Dockerfile. For permission issues, check the user and permissions running the container with the command `docker run --rm cloud-job-processor sh -c "whoami && id && ls -la /app"`
-- If the build is using stale files, rebuild without using Docker's build cache `docker build --no-cache -t cloud-job-processor .`. Check that `.dockerignore` is not excluding files that the build requires  
+- If the build is using stale files, rebuild without using Docker's build cache `docker build --no-cache -t cloud-job-processor .`. Check that `.dockerignore` is not excluding files that the build requires
+
+### Branch and PR steps
+
+- Start a new feature by making a feature branch from `main`
+- Push only to the feature branch and when finished, open a pull request into `main`
+- GitHub Actions CI will check your dependencies, unit tests and build
+- Perform the merge once GitHub Actions passes at every step
+- Delete the feature branch locally and remotely
 
 ### Phase 1: Backend API foundation
 
@@ -258,18 +266,18 @@ Stop container:
 - [x] Run tests on pull requests
 - [x] Run TypeScript build on pull requests
 - [x] Add workflow status badge to README
-- [ ] Document the CI/CD pipeline
-- [ ] Add branch/PR workflow notes
+- [ ] Document the CI/CD pipeline (CI only at the moment)
+- [x] Add branch/PR workflow notes
 
 ### Phase 5: Application architecture documentation
 
-- [ ] Add `docs/architecture.md`
-- [ ] Add `docs/trade-offs.md`
-- [ ] Add `docs/runbook.md`
-- [ ] Add architecture diagram
-- [ ] Add Architecture Decision Records under `docs/adr/`
-- [ ] Document expected production behaviour
-- [ ] Document failure scenarios and recovery approach
+- [x] Add `docs/architecture.md` (continuously updated)
+- [ ] Add `docs/trade-offs.md` (continuously updated)
+- [ ] Add `docs/runbook.md` (continuously updated)
+- [x] Add architecture diagram
+- [ ] Add Architecture Decision Records under `docs/adr/` (after phase 6)
+- [ ] Document expected production behaviour (after phase 6)
+- [ ] Document failure scenarios and recovery approach (after phase 6)
 
 ### Phase 6: Event-driven processing design
 
