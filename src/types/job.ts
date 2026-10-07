@@ -21,8 +21,3 @@ export interface CreateJobRequest {
   type: string;
   payload: Record<string, unknown>;
 }
-
-export interface JobQueue {
-  enqueue(jobId: string): Promise<void>;
-  dequeue(): Promise <string | undefined>;
-}

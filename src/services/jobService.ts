@@ -4,18 +4,18 @@
  * The service validates incoming job requests, creates job records with IDs
  * and timestamps, and delegates storage/retrieval to the repository layer.
  *
- * In later phases, this is where queue idempotency checks and
+ * In later phases, this is where queue publishing, idempotency checks and
  * job status transitions can be introduced.
  */
 
 import { randomUUID } from "crypto";
-import { CreateJobRequest, Job, JobQueue } from "../types/job";
+import { CreateJobRequest, Job } from "../types/job";
 import { JobRepository } from "../repositories/jobRepository";
 
 export class JobService {
-  constructor(private readonly jobRepository: JobRepository, private readonly jobQueue: JobQueue) {}
+  constructor(private readonly jobRepository: JobRepository) {}
 
-  async createJob(request: CreateJobRequest): Promise<Job> {
+  createJob(request: CreateJobRequest): Job {
     if (!request.type || typeof request.type !== "string") {
       throw new Error("Job type is required");
     }
@@ -34,17 +34,15 @@ export class JobService {
       createdAt: now,
       updatedAt: now,
     };
-    await this.jobQueue.enqueue(job.id);
+
     return this.jobRepository.create(job);
   }
 
-  async getJob(id: string): Promise<Job | undefined> {
+  getJob(id: string): Job | undefined {
     return this.jobRepository.findById(id);
   }
 
-  async getJobs(): Promise<Job[]> {
+  getJobs(): Job[] {
     return this.jobRepository.findAll();
   }
-
-  
 }

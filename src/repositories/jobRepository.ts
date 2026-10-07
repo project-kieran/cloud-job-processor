@@ -7,24 +7,14 @@
  * extended to use DynamoDB.
  */
 
-import { Job, JobStatus } from "../types/job";
+import { Job } from "../types/job";
 
 export class JobRepository {
   private readonly jobs = new Map<string, Job>();
-  private readonly jobStatuses = new Map<string, JobStatus>();
 
   create(job: Job): Job {
     this.jobs.set(job.id, job);
     return job;
-  }
-
-  updateStatus(id: string, status: JobStatus): void {
-    const job = this.jobs.get(id);
-    if (job) {
-      job.status = status;
-      job.updatedAt = new Date().toISOString();
-      this.jobs.set(id, job);
-    }
   }
 
   findById(id: string): Job | undefined {
