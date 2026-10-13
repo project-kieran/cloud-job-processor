@@ -59,7 +59,9 @@ test("JobWorker.processNextJob status should remain PROCESSING while fetch is pe
     const processPromise = jobWorker.processNextJob();
 
     await vi.waitFor(() => {
-        expect(fetchMock).toHaveBeenCalledWith(job.payload.url);
+        expect(fetchMock).toHaveBeenCalledWith(job.payload.url, {
+            signal: expect.any(AbortSignal),
+        });
     });
     expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
         [job.id, "PROCESSING"],
@@ -287,7 +289,9 @@ test("JobWorker.processNextJob should process only one queued job", async () => 
     expect(jobRepositoryMock.findById).toHaveBeenCalledTimes(1);
     expect(jobRepositoryMock.findById).toHaveBeenCalledWith(job.id);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith(job.payload.url);
+    expect(fetchMock).toHaveBeenCalledWith(job.payload.url, {
+        signal: expect.any(AbortSignal),
+    });
     expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
         [job.id, "PROCESSING"],
         [job.id, "COMPLETED"],
@@ -297,7 +301,9 @@ test("JobWorker.processNextJob should process only one queued job", async () => 
 
     expect(jobQueueMock.dequeue).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock).toHaveBeenNthCalledWith(2, secondJob.payload.url);
+    expect(fetchMock).toHaveBeenNthCalledWith(2, secondJob.payload.url, {
+        signal: expect.any(AbortSignal),
+    });
     expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
         [job.id, "PROCESSING"],
         [job.id, "COMPLETED"],
@@ -348,8 +354,12 @@ test("JobWorker.processNextJob should process next job after a failed job", asyn
 
     expect(jobQueueMock.dequeue).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(fetchMock).toHaveBeenNthCalledWith(1, job.payload.url);
-    expect(fetchMock).toHaveBeenNthCalledWith(2, secondJob.payload.url);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, job.payload.url, {
+        signal: expect.any(AbortSignal),
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, secondJob.payload.url, {
+        signal: expect.any(AbortSignal),
+    });
     expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
         [job.id, "PROCESSING"],
         [job.id, "FAILED"],

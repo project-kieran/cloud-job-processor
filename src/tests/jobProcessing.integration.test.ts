@@ -34,7 +34,9 @@ test("Job processing should make created job retrievable with COMPLETED status",
         status: "COMPLETED",
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith(request.payload.url);
+    expect(fetchMock).toHaveBeenCalledWith(request.payload.url, {
+        signal: expect.any(AbortSignal),
+    });
 });
 
 test("Job processing should make a job retrievable as FAILED when fetch fails", async () => {
@@ -62,7 +64,9 @@ test("Job processing should make a job retrievable as FAILED when fetch fails", 
         status: "FAILED",
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith(request.payload.url);
+    expect(fetchMock).toHaveBeenCalledWith(request.payload.url, {
+        signal: expect.any(AbortSignal),
+    });
 
 });
 
@@ -107,8 +111,12 @@ test("Job processing should process jobs in submission order", async () => {
         id: secondJob.id,
         status: "COMPLETED",
     });
-    expect(fetchMock).toHaveBeenNthCalledWith(1, firstRequest.payload.url);
-    expect(fetchMock).toHaveBeenNthCalledWith(2, secondRequest.payload.url);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, firstRequest.payload.url, {
+        signal: expect.any(AbortSignal),
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, secondRequest.payload.url, {
+        signal: expect.any(AbortSignal),
+    });
     expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
@@ -145,5 +153,7 @@ test("Job processing should store a job before consumer can process queued ID", 
         status: "COMPLETED",
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith(request.payload.url);
+    expect(fetchMock).toHaveBeenCalledWith(request.payload.url, {
+        signal: expect.any(AbortSignal),
+    });
 });
