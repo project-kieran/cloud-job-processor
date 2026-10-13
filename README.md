@@ -284,10 +284,9 @@ Stop container:
 - [x] Add queue abstraction in the application code
 - [x] Integrate queue into JobService
 - [x] Add worker service structure
-- [ ] Move from synchronous job handling toward asynchronous processing
+- [x] Move from synchronous job handling toward asynchronous processing
 - [ ] Add retry and failure-handling design
 - [ ] Add dead-letter queue design
-- [ ] Document why a queue is used for job processing
 
 ### Phase 7: AWS services integration
 

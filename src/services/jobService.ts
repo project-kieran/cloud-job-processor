@@ -16,6 +16,10 @@ export class JobService {
   constructor(private readonly jobRepository: JobRepository, private readonly jobQueue: JobQueue) {}
 
   async createJob(request: CreateJobRequest): Promise<Job> {
+    if (!request) {
+      throw new Error("Request body is required");
+    }
+    
     if (!request.type || typeof request.type !== "string") {
       throw new Error("Job type is required");
     }
@@ -34,8 +38,9 @@ export class JobService {
       createdAt: now,
       updatedAt: now,
     };
-    await this.jobQueue.enqueue(job.id);
-    return this.jobRepository.create(job);
+    const storedJob = this.jobRepository.create(job);
+    await this.jobQueue.enqueue(storedJob.id);
+    return storedJob;
   }
 
   async getJob(id: string): Promise<Job | undefined> {
