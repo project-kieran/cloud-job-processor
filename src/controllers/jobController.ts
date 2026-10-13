@@ -14,12 +14,12 @@ import { ParamsDictionary } from "express-serve-static-core";
 export class JobController {
   constructor(private readonly jobService: JobService) {}
 
-  createJob = (
+  createJob = async (
     req: Request<ParamsDictionary, unknown, CreateJobRequest>,
     res: Response,
-  ): void => {
+  ): Promise<void> => {
     try {
-      const job = this.jobService.createJob(req.body);
+      const job = await this.jobService.createJob(req.body);
       res.status(201).json(job);
       console.log("Job created:", job);
     } catch (error) {
@@ -30,8 +30,11 @@ export class JobController {
     }
   };
 
-  getJob = (req: Request<{ id: string }>, res: Response): void => {
-    const job = this.jobService.getJob(req.params.id);
+  getJob = async (
+    req: Request<{ id: string }>,
+    res: Response,
+  ): Promise<void> => {
+    const job = await this.jobService.getJob(req.params.id);
 
     if (!job) {
       res.status(404).json({ error: "Job not found" });
@@ -43,8 +46,8 @@ export class JobController {
     res.json(job);
   };
 
-  getJobs = (_req: Request, res: Response): void => {
+  getJobs = async (_req: Request, res: Response): Promise<void> => {
     console.log("Retrieving all jobs");
-    res.json(this.jobService.getJobs());
+    res.json(await this.jobService.getJobs());
   };
 }
