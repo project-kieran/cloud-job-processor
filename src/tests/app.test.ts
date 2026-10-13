@@ -47,7 +47,9 @@ test("POST /api/jobs should create a new job", async () => {
   expect(response.body).toHaveProperty("updatedAt");
   expect(response.body.id).toEqual(expect.any(String));
   expect(response.body.id.length).toBeGreaterThan(0);
-  expect(new Date(response.body.createdAt).toISOString()).toBe(response.body.createdAt);
+  expect(new Date(response.body.createdAt).toISOString()).toBe(
+    response.body.createdAt,
+  );
   expect(response.body.updatedAt).toBe(response.body.createdAt);
 });
 
@@ -118,10 +120,12 @@ test.each([
   ["object", {}],
   ["array", []],
 ])("POST /api/jobs should reject a %s type", async (_label, type) => {
-  const response = await request(app).post("/api/jobs").send({
-    type,
-    payload: { url: "https://example.com" },
-  });
+  const response = await request(app)
+    .post("/api/jobs")
+    .send({
+      type,
+      payload: { url: "https://example.com" },
+    });
   expect(response.status).toBe(400);
   expect(response.body).toEqual({ error: "Job type is required" });
 
@@ -149,7 +153,10 @@ test("POST /api/jobs should reject malformed JSON", async () => {
 
 test("GET /api/jobs should return all created jobs with distinct IDs", async () => {
   const jobs = [];
-  for (const url of ["https://example.com/first", "https://example.com/second"]) {
+  for (const url of [
+    "https://example.com/first",
+    "https://example.com/second",
+  ]) {
     const response = await request(app)
       .post("/api/jobs")
       .send({ type: "CRAWL_URL", payload: { url } });

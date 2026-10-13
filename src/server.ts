@@ -38,23 +38,23 @@ async function shutdown(): Promise<void> {
   stopping = true;
 
   const serverClosed = new Promise<void>((resolve, reject) => {
-    server.close((error => {
+    server.close((error) => {
       if (error) {
         reject(error);
       } else {
         resolve();
       }
-    }));
+    });
   });
 
   await Promise.all([serverClosed, workerLoop]);
 }
 
 function handleShutdown(): void {
-    void shutdown().catch((error) => {
-      console.error("Shutdown failed:", error);
-      process.exitCode = 1;
-    });
-  }
-  process.on("SIGINT", handleShutdown);
-  process.on("SIGTERM", handleShutdown);
+  void shutdown().catch((error) => {
+    console.error("Shutdown failed:", error);
+    process.exitCode = 1;
+  });
+}
+process.on("SIGINT", handleShutdown);
+process.on("SIGTERM", handleShutdown);

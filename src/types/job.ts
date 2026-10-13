@@ -24,5 +24,5 @@ export interface CreateJobRequest {
 
 export interface JobQueue {
   enqueue(jobId: string): Promise<void>;
-  dequeue(): Promise <string | undefined>;
+  dequeue(): Promise<string | undefined>;
 }

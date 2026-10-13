@@ -13,13 +13,19 @@ import { CreateJobRequest, Job, JobQueue } from "../types/job";
 import { JobRepository } from "../repositories/jobRepository";
 
 export class JobService {
-  constructor(private readonly jobRepository: JobRepository, private readonly jobQueue: JobQueue) {}
+  constructor(
+    private readonly jobRepository: Pick<
+      JobRepository,
+      "create" | "findById" | "findAll"
+    >,
+    private readonly jobQueue: Pick<JobQueue, "enqueue">,
+  ) {}
 
   async createJob(request: CreateJobRequest): Promise<Job> {
     if (!request) {
       throw new Error("Request body is required");
     }
-    
+
     if (!request.type || typeof request.type !== "string") {
       throw new Error("Job type is required");
     }
@@ -50,6 +56,4 @@ export class JobService {
   async getJobs(): Promise<Job[]> {
     return this.jobRepository.findAll();
   }
-
-  
 }

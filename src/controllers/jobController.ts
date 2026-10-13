@@ -30,7 +30,10 @@ export class JobController {
     }
   };
 
-  getJob = async (req: Request<{ id: string }>, res: Response): Promise<void> => {
+  getJob = async (
+    req: Request<{ id: string }>,
+    res: Response,
+  ): Promise<void> => {
     const job = await this.jobService.getJob(req.params.id);
 
     if (!job) {
