@@ -39,19 +39,17 @@ test("Job processing should make created job retrievable with COMPLETED status",
   });
 });
 
-test("Job processing should make a job retrievable as FAILED when fetch fails", async () => {
+test("Job processing should mark a job FAILED after exhausting retries for HTTP 500", async () => {
   const repository = new JobRepository();
   const queue = new InMemoryJobQueue();
   const service = new JobService(repository, queue);
   const worker = new JobWorker(repository, queue);
 
-  const fetchMock = vi
-    .fn()
-    .mockResolvedValue({
-      ok: false,
-      status: 500,
-      statusText: "Internal Server Error",
-    });
+  const fetchMock = vi.fn().mockResolvedValue({
+    ok: false,
+    status: 500,
+    statusText: "Internal Server Error",
+  });
   vi.stubGlobal("fetch", fetchMock);
   const request = {
     type: "CRAWL_URL",
@@ -60,6 +58,16 @@ test("Job processing should make a job retrievable as FAILED when fetch fails", 
 
   const createdJob = await service.createJob(request);
   expect(createdJob.status).toBe("PENDING");
+  // The first two failures requeue the job for another attempt.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    await worker.processNextJob();
+    expect(await service.getJob(createdJob.id)).toMatchObject({
+      id: createdJob.id,
+      status: "PENDING",
+      attempts: attempt,
+    });
+  }
+
   await worker.processNextJob();
 
   const processedJob = await service.getJob(createdJob.id);
@@ -68,10 +76,19 @@ test("Job processing should make a job retrievable as FAILED when fetch fails", 
     type: request.type,
     payload: request.payload,
     status: "FAILED",
+    attempts: 3,
   });
-  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(fetchMock).toHaveBeenCalledTimes(3);
   expect(fetchMock).toHaveBeenCalledWith(request.payload.url, {
     signal: expect.any(AbortSignal),
+  });
+
+  // Exhausted jobs must not be left queued for a fourth attempt.
+  await worker.processNextJob();
+  expect(fetchMock).toHaveBeenCalledTimes(3);
+  expect(await service.getJob(createdJob.id)).toMatchObject({
+    status: "FAILED",
+    attempts: 3,
   });
 });
 

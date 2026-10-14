@@ -42,6 +42,9 @@ Logs / Metrics / Monitoring
 - Retrieve a job by ID
 - List submitted jobs
 - In-memory job repository
+- In-memory job queue
+- Asynchronous worker processing
+- Retry and failure handling
 
 ## API endpoints
 
@@ -285,7 +288,7 @@ Stop container:
 - [x] Integrate queue into JobService
 - [x] Add worker service structure
 - [x] Move from synchronous job handling toward asynchronous processing
-- [ ] Add retry and failure-handling design
+- [x] Add retry and failure-handling design
 - [ ] Add dead-letter queue design
 
 ### Phase 7: AWS services integration

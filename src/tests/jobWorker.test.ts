@@ -37,26 +37,14 @@ function createRetrySetup() {
   };
 }
 
-test.each([
-  "HTTP error",
-  "network error",
-  "unsupported type",
-  "missing URL",
-  "non-string URL",
-])(
+test.each(["HTTP error", "network error"])(
   "JobWorker.processNextJob should stop retrying after three attempts for %s",
   async (failure) => {
     const { job, repository, queue, fetchMock, worker } = createRetrySetup();
     if (failure === "HTTP error") {
       fetchMock.mockResolvedValue(new Response(null, { status: 500 }));
-    } else if (failure === "network error") {
-      fetchMock.mockRejectedValue(new Error("Network failure"));
-    } else if (failure === "unsupported type") {
-      job.type = "UNSUPPORTED";
-    } else if (failure === "missing URL") {
-      job.payload = {};
     } else {
-      job.payload = { url: 123 };
+      fetchMock.mockRejectedValue(new Error("Network failure"));
     }
 
     for (let attempt = 1; attempt <= 3; attempt++) {
@@ -79,9 +67,7 @@ test.each([
 
     expect(repository.updateStatus).toHaveBeenCalledTimes(6);
     expect(queue.enqueue.mock.calls).toEqual([[job.id], [job.id]]);
-    expect(fetchMock).toHaveBeenCalledTimes(
-      failure === "HTTP error" || failure === "network error" ? 3 : 0,
-    );
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   },
 );
 
@@ -279,7 +265,7 @@ test("JobWorker.processNextJob should requeue the job as PENDING when fetch is r
   expect(jobQueueMock.enqueue).toHaveBeenCalledWith(job.id);
 });
 
-test("JobWorker.processNextJob should requeue the job as PENDING and not fetch on invalid job type", async () => {
+test("JobWorker.processNextJob should fail without retrying or fetching on invalid job type", async () => {
   const job: Job = {
     id: "job-1",
     type: "UNSUPPORTED",
@@ -307,15 +293,14 @@ test("JobWorker.processNextJob should requeue the job as PENDING and not fetch o
   expect(jobRepositoryMock.findById).toHaveBeenCalledWith(job.id);
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
     [job.id, "PROCESSING", 1],
-    [job.id, "PENDING", 1],
+    [job.id, "FAILED", 1],
   ]);
   expect(fetchMock).not.toHaveBeenCalled();
   expect(job.attempts).toBe(1);
-  expect(jobQueueMock.enqueue).toHaveBeenCalledTimes(1);
-  expect(jobQueueMock.enqueue).toHaveBeenCalledWith(job.id);
+  expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
 });
 
-test("JobWorker.processNextJob should requeue the job as PENDING and not fetch when URL is missing", async () => {
+test("JobWorker.processNextJob should fail without retrying or fetching when URL is missing", async () => {
   const job: Job = {
     id: "job-1",
     type: "CRAWL_URL",
@@ -343,15 +328,14 @@ test("JobWorker.processNextJob should requeue the job as PENDING and not fetch w
   expect(jobRepositoryMock.findById).toHaveBeenCalledWith(job.id);
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
     [job.id, "PROCESSING", 1],
-    [job.id, "PENDING", 1],
+    [job.id, "FAILED", 1],
   ]);
   expect(fetchMock).not.toHaveBeenCalled();
   expect(job.attempts).toBe(1);
-  expect(jobQueueMock.enqueue).toHaveBeenCalledTimes(1);
-  expect(jobQueueMock.enqueue).toHaveBeenCalledWith(job.id);
+  expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
 });
 
-test("JobWorker.processNextJob should requeue the job as PENDING and not fetch on non-string URL", async () => {
+test("JobWorker.processNextJob should fail without retrying or fetching on non-string URL", async () => {
   const job: Job = {
     id: "job-1",
     type: "CRAWL_URL",
@@ -379,12 +363,11 @@ test("JobWorker.processNextJob should requeue the job as PENDING and not fetch o
   expect(jobRepositoryMock.findById).toHaveBeenCalledWith(job.id);
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
     [job.id, "PROCESSING", 1],
-    [job.id, "PENDING", 1],
+    [job.id, "FAILED", 1],
   ]);
   expect(fetchMock).not.toHaveBeenCalled();
   expect(job.attempts).toBe(1);
-  expect(jobQueueMock.enqueue).toHaveBeenCalledTimes(1);
-  expect(jobQueueMock.enqueue).toHaveBeenCalledWith(job.id);
+  expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
 });
 
 test("JobWorker.processNextJob should return missing job error when job ID is unknown", async () => {
