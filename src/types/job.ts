@@ -15,6 +15,7 @@ export interface Job {
   status: JobStatus;
   createdAt: string;
   updatedAt: string;
+  attempts: number;
 }
 
 export interface CreateJobRequest {

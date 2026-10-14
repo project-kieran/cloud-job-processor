@@ -7,12 +7,123 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-test("JobWorker.processJob should return without fetching on empty queue", async () => {
+// Each call creates fresh typed dependencies for the retry scenarios.
+function createRetrySetup() {
+  const job: Job = {
+    id: "retry-job",
+    type: "CRAWL_URL",
+    payload: { url: "https://example.com" },
+    status: "PENDING",
+    attempts: 0,
+    createdAt: "2026-01-01T12:00:00.000Z",
+    updatedAt: "2026-01-01T12:00:00.000Z",
+  };
+  const repository = {
+    findById: vi.fn<JobRepository["findById"]>().mockReturnValue(job),
+    updateStatus: vi.fn<JobRepository["updateStatus"]>(),
+  };
+  const queue = {
+    enqueue: vi.fn<JobQueue["enqueue"]>().mockResolvedValue(undefined),
+    dequeue: vi.fn<JobQueue["dequeue"]>().mockResolvedValue(job.id),
+  };
+  const fetchMock = vi.fn<typeof fetch>();
+  vi.stubGlobal("fetch", fetchMock);
+  return {
+    job,
+    repository,
+    queue,
+    fetchMock,
+    worker: new JobWorker(repository, queue),
+  };
+}
+
+test.each(["HTTP error", "network error"])(
+  "JobWorker.processNextJob should stop retrying after three attempts for %s",
+  async (failure) => {
+    const { job, repository, queue, fetchMock, worker } = createRetrySetup();
+    if (failure === "HTTP error") {
+      fetchMock.mockResolvedValue(new Response(null, { status: 500 }));
+    } else {
+      fetchMock.mockRejectedValue(new Error("Network failure"));
+    }
+
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      await worker.processNextJob();
+      expect(job.attempts).toBe(attempt);
+      expect(repository.updateStatus).toHaveBeenNthCalledWith(
+        attempt * 2 - 1,
+        job.id,
+        "PROCESSING",
+        attempt,
+      );
+      expect(repository.updateStatus).toHaveBeenNthCalledWith(
+        attempt * 2,
+        job.id,
+        attempt < 3 ? "PENDING" : "FAILED",
+        attempt,
+      );
+      expect(queue.enqueue).toHaveBeenCalledTimes(Math.min(attempt, 2));
+    }
+
+    expect(repository.updateStatus).toHaveBeenCalledTimes(6);
+    expect(queue.enqueue.mock.calls).toEqual([[job.id], [job.id]]);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  },
+);
+
+test.each([2, 3])(
+  "JobWorker.processNextJob should complete on attempt %i without requeueing again",
+  async (successfulAttempt) => {
+    const { job, repository, queue, fetchMock, worker } = createRetrySetup();
+    for (let attempt = 1; attempt < successfulAttempt; attempt++) {
+      fetchMock.mockRejectedValueOnce(new Error("Temporary network failure"));
+    }
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 200 }));
+
+    for (let attempt = 1; attempt <= successfulAttempt; attempt++) {
+      await worker.processNextJob();
+    }
+
+    expect(job.attempts).toBe(successfulAttempt);
+    expect(fetchMock).toHaveBeenCalledTimes(successfulAttempt);
+    expect(queue.enqueue).toHaveBeenCalledTimes(successfulAttempt - 1);
+    expect(repository.updateStatus).toHaveBeenLastCalledWith(
+      job.id,
+      "COMPLETED",
+      successfulAttempt,
+    );
+    expect(repository.updateStatus).not.toHaveBeenCalledWith(
+      job.id,
+      "FAILED",
+      expect.any(Number),
+    );
+  },
+);
+
+test("JobWorker.processNextJob should propagate an enqueue failure when retrying", async () => {
+  const { job, repository, queue, fetchMock, worker } = createRetrySetup();
+  const queueError = new Error("Queue unavailable");
+  fetchMock.mockRejectedValue(new Error("Network failure"));
+  queue.enqueue.mockRejectedValue(queueError);
+
+  await expect(worker.processNextJob()).rejects.toBe(queueError);
+
+  expect(job.attempts).toBe(1);
+  expect(queue.enqueue).toHaveBeenCalledTimes(1);
+  expect(queue.enqueue).toHaveBeenCalledWith(job.id);
+  expect(repository.updateStatus.mock.calls).toEqual([
+    [job.id, "PROCESSING", 1],
+    [job.id, "PENDING", 1],
+  ]);
+});
+
+test("JobWorker.processNextJob should return without fetching on empty queue", async () => {
   const jobRepositoryMock = {
     findById: vi.fn<JobRepository["findById"]>(),
     updateStatus: vi.fn<JobRepository["updateStatus"]>(),
   };
   const jobQueueMock = {
+    enqueue: vi.fn<JobQueue["enqueue"]>().mockResolvedValue(undefined),
     dequeue: vi.fn<JobQueue["dequeue"]>().mockResolvedValue(undefined),
   };
   const fetchMock = vi.fn();
@@ -26,6 +137,7 @@ test("JobWorker.processJob should return without fetching on empty queue", async
   expect(jobRepositoryMock.findById).not.toHaveBeenCalled();
   expect(jobRepositoryMock.updateStatus).not.toHaveBeenCalled();
   expect(fetchMock).not.toHaveBeenCalled();
+  expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
 });
 
 test("JobWorker.processNextJob status should remain PROCESSING while fetch is pending", async () => {
@@ -34,6 +146,7 @@ test("JobWorker.processNextJob status should remain PROCESSING while fetch is pe
     type: "CRAWL_URL",
     payload: { url: "https://example.com" },
     status: "PENDING",
+    attempts: 0,
     createdAt: "2026-01-01T12:00:00.000Z",
     updatedAt: "2026-01-01T12:00:00.000Z",
   };
@@ -44,6 +157,7 @@ test("JobWorker.processNextJob status should remain PROCESSING while fetch is pe
   };
 
   const jobQueueMock = {
+    enqueue: vi.fn<JobQueue["enqueue"]>().mockResolvedValue(undefined),
     dequeue: vi.fn<JobQueue["dequeue"]>().mockResolvedValue(job.id),
   };
 
@@ -64,22 +178,24 @@ test("JobWorker.processNextJob status should remain PROCESSING while fetch is pe
     });
   });
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
-    [job.id, "PROCESSING"],
+    [job.id, "PROCESSING", 1],
   ]);
   resolveFetch({ ok: true });
   await processPromise;
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
-    [job.id, "PROCESSING"],
-    [job.id, "COMPLETED"],
+    [job.id, "PROCESSING", 1],
+    [job.id, "COMPLETED", 1],
   ]);
+  expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
 });
 
-test("JobWorker.processNextJob should mark the job FAILED for invalid HTTP response", async () => {
+test("JobWorker.processNextJob should requeue the job as PENDING for invalid HTTP response", async () => {
   const job: Job = {
     id: "job-1",
     type: "CRAWL_URL",
     payload: { url: "https://example.com" },
     status: "PENDING",
+    attempts: 0,
     createdAt: "2026-01-01T12:00:00.000Z",
     updatedAt: "2026-01-01T12:00:00.000Z",
   };
@@ -90,6 +206,7 @@ test("JobWorker.processNextJob should mark the job FAILED for invalid HTTP respo
   };
 
   const jobQueueMock = {
+    enqueue: vi.fn<JobQueue["enqueue"]>().mockResolvedValue(undefined),
     dequeue: vi.fn<JobQueue["dequeue"]>().mockResolvedValue(job.id),
   };
 
@@ -104,17 +221,21 @@ test("JobWorker.processNextJob should mark the job FAILED for invalid HTTP respo
   await jobWorker.processNextJob();
 
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
-    [job.id, "PROCESSING"],
-    [job.id, "FAILED"],
+    [job.id, "PROCESSING", 1],
+    [job.id, "PENDING", 1],
   ]);
+  expect(job.attempts).toBe(1);
+  expect(jobQueueMock.enqueue).toHaveBeenCalledTimes(1);
+  expect(jobQueueMock.enqueue).toHaveBeenCalledWith(job.id);
 });
 
-test("JobWorker.processNextJob should mark the job FAILED when fetch is rejected", async () => {
+test("JobWorker.processNextJob should requeue the job as PENDING when fetch is rejected", async () => {
   const job: Job = {
     id: "job-1",
     type: "CRAWL_URL",
     payload: { url: "https://example.com" },
     status: "PENDING",
+    attempts: 0,
     createdAt: "2026-01-01T12:00:00.000Z",
     updatedAt: "2026-01-01T12:00:00.000Z",
   };
@@ -125,6 +246,7 @@ test("JobWorker.processNextJob should mark the job FAILED when fetch is rejected
   };
 
   const jobQueueMock = {
+    enqueue: vi.fn<JobQueue["enqueue"]>().mockResolvedValue(undefined),
     dequeue: vi.fn<JobQueue["dequeue"]>().mockResolvedValue(job.id),
   };
 
@@ -135,17 +257,21 @@ test("JobWorker.processNextJob should mark the job FAILED when fetch is rejected
   await jobWorker.processNextJob();
 
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
-    [job.id, "PROCESSING"],
-    [job.id, "FAILED"],
+    [job.id, "PROCESSING", 1],
+    [job.id, "PENDING", 1],
   ]);
+  expect(job.attempts).toBe(1);
+  expect(jobQueueMock.enqueue).toHaveBeenCalledTimes(1);
+  expect(jobQueueMock.enqueue).toHaveBeenCalledWith(job.id);
 });
 
-test("JobWorker.processNextJob should mark the job FAILED and not fetch on invalid job type", async () => {
+test("JobWorker.processNextJob should fail without retrying or fetching on invalid job type", async () => {
   const job: Job = {
     id: "job-1",
     type: "UNSUPPORTED",
     payload: { url: "https://example.com" },
     status: "PENDING",
+    attempts: 0,
     createdAt: "2026-01-01T12:00:00.000Z",
     updatedAt: "2026-01-01T12:00:00.000Z",
   };
@@ -155,6 +281,7 @@ test("JobWorker.processNextJob should mark the job FAILED and not fetch on inval
     updateStatus: vi.fn<JobRepository["updateStatus"]>(),
   };
   const jobQueueMock = {
+    enqueue: vi.fn<JobQueue["enqueue"]>().mockResolvedValue(undefined),
     dequeue: vi.fn<JobQueue["dequeue"]>().mockResolvedValue(job.id),
   };
   const fetchMock = vi.fn();
@@ -165,18 +292,21 @@ test("JobWorker.processNextJob should mark the job FAILED and not fetch on inval
 
   expect(jobRepositoryMock.findById).toHaveBeenCalledWith(job.id);
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
-    [job.id, "PROCESSING"],
-    [job.id, "FAILED"],
+    [job.id, "PROCESSING", 1],
+    [job.id, "FAILED", 1],
   ]);
   expect(fetchMock).not.toHaveBeenCalled();
+  expect(job.attempts).toBe(1);
+  expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
 });
 
-test("JobWorker.processNextJob should mark the job FAILED and not fetch when URL is missing", async () => {
+test("JobWorker.processNextJob should fail without retrying or fetching when URL is missing", async () => {
   const job: Job = {
     id: "job-1",
     type: "CRAWL_URL",
     payload: {},
     status: "PENDING",
+    attempts: 0,
     createdAt: "2026-01-01T12:00:00.000Z",
     updatedAt: "2026-01-01T12:00:00.000Z",
   };
@@ -186,6 +316,7 @@ test("JobWorker.processNextJob should mark the job FAILED and not fetch when URL
     updateStatus: vi.fn<JobRepository["updateStatus"]>(),
   };
   const jobQueueMock = {
+    enqueue: vi.fn<JobQueue["enqueue"]>().mockResolvedValue(undefined),
     dequeue: vi.fn<JobQueue["dequeue"]>().mockResolvedValue(job.id),
   };
   const fetchMock = vi.fn();
@@ -196,18 +327,21 @@ test("JobWorker.processNextJob should mark the job FAILED and not fetch when URL
 
   expect(jobRepositoryMock.findById).toHaveBeenCalledWith(job.id);
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
-    [job.id, "PROCESSING"],
-    [job.id, "FAILED"],
+    [job.id, "PROCESSING", 1],
+    [job.id, "FAILED", 1],
   ]);
   expect(fetchMock).not.toHaveBeenCalled();
+  expect(job.attempts).toBe(1);
+  expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
 });
 
-test("JobWorker.processNextJob should mark the job FAILED and not fetch on non-string URL", async () => {
+test("JobWorker.processNextJob should fail without retrying or fetching on non-string URL", async () => {
   const job: Job = {
     id: "job-1",
     type: "CRAWL_URL",
     payload: { url: 123 },
     status: "PENDING",
+    attempts: 0,
     createdAt: "2026-01-01T12:00:00.000Z",
     updatedAt: "2026-01-01T12:00:00.000Z",
   };
@@ -217,6 +351,7 @@ test("JobWorker.processNextJob should mark the job FAILED and not fetch on non-s
     updateStatus: vi.fn<JobRepository["updateStatus"]>(),
   };
   const jobQueueMock = {
+    enqueue: vi.fn<JobQueue["enqueue"]>().mockResolvedValue(undefined),
     dequeue: vi.fn<JobQueue["dequeue"]>().mockResolvedValue(job.id),
   };
   const fetchMock = vi.fn();
@@ -227,10 +362,12 @@ test("JobWorker.processNextJob should mark the job FAILED and not fetch on non-s
 
   expect(jobRepositoryMock.findById).toHaveBeenCalledWith(job.id);
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
-    [job.id, "PROCESSING"],
-    [job.id, "FAILED"],
+    [job.id, "PROCESSING", 1],
+    [job.id, "FAILED", 1],
   ]);
   expect(fetchMock).not.toHaveBeenCalled();
+  expect(job.attempts).toBe(1);
+  expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
 });
 
 test("JobWorker.processNextJob should return missing job error when job ID is unknown", async () => {
@@ -239,6 +376,7 @@ test("JobWorker.processNextJob should return missing job error when job ID is un
     updateStatus: vi.fn<JobRepository["updateStatus"]>(),
   };
   const jobQueueMock = {
+    enqueue: vi.fn<JobQueue["enqueue"]>().mockResolvedValue(undefined),
     dequeue: vi.fn<JobQueue["dequeue"]>().mockResolvedValue("unknown-id"),
   };
   const fetchMock = vi.fn();
@@ -252,6 +390,7 @@ test("JobWorker.processNextJob should return missing job error when job ID is un
   expect(jobRepositoryMock.findById).toHaveBeenCalledWith("unknown-id");
   expect(jobRepositoryMock.updateStatus).not.toHaveBeenCalled();
   expect(fetchMock).not.toHaveBeenCalled();
+  expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
 });
 
 test("JobWorker.processNextJob should process only one queued job", async () => {
@@ -260,6 +399,7 @@ test("JobWorker.processNextJob should process only one queued job", async () => 
     type: "CRAWL_URL",
     payload: { url: "https://example.com" },
     status: "PENDING",
+    attempts: 0,
     createdAt: "2026-01-01T12:00:00.000Z",
     updatedAt: "2026-01-01T12:00:00.000Z",
   };
@@ -277,6 +417,7 @@ test("JobWorker.processNextJob should process only one queued job", async () => 
     updateStatus: vi.fn<JobRepository["updateStatus"]>(),
   };
   const jobQueueMock = {
+    enqueue: vi.fn<JobQueue["enqueue"]>().mockResolvedValue(undefined),
     dequeue: vi
       .fn<JobQueue["dequeue"]>()
       .mockResolvedValueOnce(job.id)
@@ -297,8 +438,8 @@ test("JobWorker.processNextJob should process only one queued job", async () => 
     signal: expect.any(AbortSignal),
   });
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
-    [job.id, "PROCESSING"],
-    [job.id, "COMPLETED"],
+    [job.id, "PROCESSING", 1],
+    [job.id, "COMPLETED", 1],
   ]);
 
   await jobWorker.processNextJob();
@@ -309,19 +450,21 @@ test("JobWorker.processNextJob should process only one queued job", async () => 
     signal: expect.any(AbortSignal),
   });
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
-    [job.id, "PROCESSING"],
-    [job.id, "COMPLETED"],
-    [secondJob.id, "PROCESSING"],
-    [secondJob.id, "COMPLETED"],
+    [job.id, "PROCESSING", 1],
+    [job.id, "COMPLETED", 1],
+    [secondJob.id, "PROCESSING", 1],
+    [secondJob.id, "COMPLETED", 1],
   ]);
+  expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
 });
 
-test("JobWorker.processNextJob should process next job after a failed job", async () => {
+test("JobWorker.processNextJob should process the next job while a failed attempt awaits retry", async () => {
   const job: Job = {
     id: "job-1",
     type: "CRAWL_URL",
     payload: { url: "https://example.com" },
     status: "PENDING",
+    attempts: 0,
     createdAt: "2026-01-01T12:00:00.000Z",
     updatedAt: "2026-01-01T12:00:00.000Z",
   };
@@ -339,6 +482,7 @@ test("JobWorker.processNextJob should process next job after a failed job", asyn
     updateStatus: vi.fn<JobRepository["updateStatus"]>(),
   };
   const jobQueueMock = {
+    enqueue: vi.fn<JobQueue["enqueue"]>().mockResolvedValue(undefined),
     dequeue: vi
       .fn<JobQueue["dequeue"]>()
       .mockResolvedValueOnce(job.id)
@@ -354,8 +498,8 @@ test("JobWorker.processNextJob should process next job after a failed job", asyn
 
   await expect(jobWorker.processNextJob()).resolves.toBeUndefined();
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
-    [job.id, "PROCESSING"],
-    [job.id, "FAILED"],
+    [job.id, "PROCESSING", 1],
+    [job.id, "PENDING", 1],
   ]);
 
   await expect(jobWorker.processNextJob()).resolves.toBeUndefined();
@@ -369,9 +513,12 @@ test("JobWorker.processNextJob should process next job after a failed job", asyn
     signal: expect.any(AbortSignal),
   });
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
-    [job.id, "PROCESSING"],
-    [job.id, "FAILED"],
-    [secondJob.id, "PROCESSING"],
-    [secondJob.id, "COMPLETED"],
+    [job.id, "PROCESSING", 1],
+    [job.id, "PENDING", 1],
+    [secondJob.id, "PROCESSING", 1],
+    [secondJob.id, "COMPLETED", 1],
   ]);
+  expect(job.attempts).toBe(1);
+  expect(jobQueueMock.enqueue).toHaveBeenCalledTimes(1);
+  expect(jobQueueMock.enqueue).toHaveBeenCalledWith(job.id);
 });

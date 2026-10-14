@@ -43,6 +43,7 @@ export class JobService {
       status: "PENDING",
       createdAt: now,
       updatedAt: now,
+      attempts: 0
     };
     const storedJob = this.jobRepository.create(job);
     await this.jobQueue.enqueue(storedJob.id);
