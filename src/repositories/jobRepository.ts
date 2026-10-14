@@ -18,10 +18,11 @@ export class JobRepository {
     return job;
   }
 
-  updateStatus(id: string, status: JobStatus): void {
+  updateStatus(id: string, status: JobStatus, attempt: number): void {
     const job = this.jobs.get(id);
     if (job) {
       job.status = status;
+      job.attempts = attempt;
       job.updatedAt = new Date().toISOString();
       this.jobs.set(id, job);
     }

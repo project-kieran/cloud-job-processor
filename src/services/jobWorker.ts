@@ -7,7 +7,7 @@ export class JobWorker {
       JobRepository,
       "findById" | "updateStatus"
     >,
-    private readonly queue: Pick<JobQueue, "dequeue">,
+    private readonly queue: Pick<JobQueue, "enqueue" | "dequeue">,
   ) {}
 
   private async processJob(job: Job): Promise<void> {
@@ -38,17 +38,24 @@ export class JobWorker {
     }
 
     const job = this.repository.findById(jobId);
-
+    
     if (!job) {
       throw new Error(`Job with ID ${jobId} not found`);
     }
 
+    job.attempts++;
+    const maxAttempts = 3;
     try {
-      this.repository.updateStatus(job.id, "PROCESSING");
+      this.repository.updateStatus(job.id, "PROCESSING", job.attempts);
       await this.processJob(job);
-      this.repository.updateStatus(job.id, "COMPLETED");
+      this.repository.updateStatus(job.id, "COMPLETED", job.attempts);
     } catch {
-      this.repository.updateStatus(job.id, "FAILED");
+      if (job.attempts < maxAttempts){
+        this.repository.updateStatus(job.id, "PENDING", job.attempts);
+        await this.queue.enqueue(job.id);
+      } else {
+          this.repository.updateStatus(job.id, "FAILED", job.attempts);
+      }
     }
   }
 }
