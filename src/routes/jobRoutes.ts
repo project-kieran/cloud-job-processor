@@ -14,8 +14,9 @@ const router = Router();
 
 const jobRepository = new JobRepository();
 const jobQueue = new InMemoryJobQueue();
+const deadLetterQueue = new InMemoryJobQueue();
 const jobService = new JobService(jobRepository, jobQueue);
-export const jobWorker = new JobWorker(jobRepository, jobQueue);
+export const jobWorker = new JobWorker(jobRepository, jobQueue, deadLetterQueue);
 const jobController = new JobController(jobService);
 
 router.post("/jobs", jobController.createJob);

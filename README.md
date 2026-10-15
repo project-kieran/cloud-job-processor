@@ -289,7 +289,7 @@ Stop container:
 - [x] Add worker service structure
 - [x] Move from synchronous job handling toward asynchronous processing
 - [x] Add retry and failure-handling design
-- [ ] Add dead-letter queue design
+- [x] Add dead-letter queue design
 
 ### Phase 7: AWS services integration
 

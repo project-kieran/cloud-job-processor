@@ -8,11 +8,56 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+test("Job processing should isolate dead-lettered jobs and continue processing the main queue", async () => {
+  const repository = new JobRepository();
+  const queue = new InMemoryJobQueue();
+  const deadLetterQueue = new InMemoryJobQueue();
+  const service = new JobService(repository, queue);
+  const worker = new JobWorker(repository, queue, deadLetterQueue);
+  const fetchMock = vi
+    .fn<typeof fetch>()
+    .mockResolvedValue(new Response(null, { status: 200 }));
+  vi.stubGlobal("fetch", fetchMock);
+
+  const invalidJob = await service.createJob({
+    type: "UNSUPPORTED",
+    payload: {},
+  });
+  const validJob = await service.createJob({
+    type: "CRAWL_URL",
+    payload: { url: "https://example.com" },
+  });
+
+  await worker.processNextJob();
+  expect(await service.getJob(invalidJob.id)).toMatchObject({
+    status: "FAILED",
+    attempts: 1,
+  });
+  expect(fetchMock).not.toHaveBeenCalled();
+
+  await worker.processNextJob();
+  await worker.processNextJob();
+
+  expect(await service.getJob(validJob.id)).toMatchObject({
+    status: "COMPLETED",
+    attempts: 1,
+  });
+  expect(await service.getJob(invalidJob.id)).toMatchObject({
+    status: "FAILED",
+    attempts: 1,
+  });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  await expect(queue.dequeue()).resolves.toBeUndefined();
+  await expect(deadLetterQueue.dequeue()).resolves.toBe(invalidJob.id);
+  await expect(deadLetterQueue.dequeue()).resolves.toBeUndefined();
+});
+
 test("Job processing should make created job retrievable with COMPLETED status", async () => {
   const repository = new JobRepository();
   const queue = new InMemoryJobQueue();
+  const deadLetterQueue = new InMemoryJobQueue();
   const service = new JobService(repository, queue);
-  const worker = new JobWorker(repository, queue);
+  const worker = new JobWorker(repository, queue, deadLetterQueue);
 
   const fetchMock = vi.fn().mockResolvedValue({ ok: true });
   vi.stubGlobal("fetch", fetchMock);
@@ -37,13 +82,15 @@ test("Job processing should make created job retrievable with COMPLETED status",
   expect(fetchMock).toHaveBeenCalledWith(request.payload.url, {
     signal: expect.any(AbortSignal),
   });
+  await expect(deadLetterQueue.dequeue()).resolves.toBeUndefined();
 });
 
 test("Job processing should mark a job FAILED after exhausting retries for HTTP 500", async () => {
   const repository = new JobRepository();
   const queue = new InMemoryJobQueue();
+  const deadLetterQueue = new InMemoryJobQueue();
   const service = new JobService(repository, queue);
-  const worker = new JobWorker(repository, queue);
+  const worker = new JobWorker(repository, queue, deadLetterQueue);
 
   const fetchMock = vi.fn().mockResolvedValue({
     ok: false,
@@ -90,13 +137,16 @@ test("Job processing should mark a job FAILED after exhausting retries for HTTP 
     status: "FAILED",
     attempts: 3,
   });
+  await expect(deadLetterQueue.dequeue()).resolves.toBe(createdJob.id);
+  await expect(deadLetterQueue.dequeue()).resolves.toBeUndefined();
 });
 
 test("Job processing should process jobs in submission order", async () => {
   const repository = new JobRepository();
   const queue = new InMemoryJobQueue();
+  const deadLetterQueue = new InMemoryJobQueue();
   const service = new JobService(repository, queue);
-  const worker = new JobWorker(repository, queue);
+  const worker = new JobWorker(repository, queue, deadLetterQueue);
 
   const fetchMock = vi.fn().mockResolvedValue({ ok: true });
   vi.stubGlobal("fetch", fetchMock);
@@ -140,13 +190,15 @@ test("Job processing should process jobs in submission order", async () => {
     signal: expect.any(AbortSignal),
   });
   expect(fetchMock).toHaveBeenCalledTimes(2);
+  await expect(deadLetterQueue.dequeue()).resolves.toBeUndefined();
 });
 
 test("Job processing should store a job before consumer can process queued ID", async () => {
   const repository = new JobRepository();
   const queue = new InMemoryJobQueue();
+  const deadLetterQueue = new InMemoryJobQueue();
   const service = new JobService(repository, queue);
-  const worker = new JobWorker(repository, queue);
+  const worker = new JobWorker(repository, queue, deadLetterQueue);
 
   const fetchMock = vi.fn().mockResolvedValue({ ok: true });
   vi.stubGlobal("fetch", fetchMock);
@@ -178,4 +230,5 @@ test("Job processing should store a job before consumer can process queued ID", 
   expect(fetchMock).toHaveBeenCalledWith(request.payload.url, {
     signal: expect.any(AbortSignal),
   });
+  await expect(deadLetterQueue.dequeue()).resolves.toBeUndefined();
 });

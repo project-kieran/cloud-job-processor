@@ -8,6 +8,7 @@ export class JobWorker {
       "findById" | "updateStatus"
     >,
     private readonly queue: Pick<JobQueue, "enqueue" | "dequeue">,
+    private readonly deadLetterQueue: Pick<JobQueue, "enqueue" | "dequeue">
   ) {}
 
   private async processJob(job: Job): Promise<void> {
@@ -65,6 +66,7 @@ export class JobWorker {
           await this.queue.enqueue(job.id);
       } else {
           this.repository.updateStatus(job.id, "FAILED", job.attempts);
+          await this.deadLetterQueue.enqueue(job.id);
       }
     }
   }
