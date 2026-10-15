@@ -7,7 +7,13 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-// Each call creates fresh typed dependencies for the retry scenarios.
+function createDeadLetterQueueMock() {
+  return {
+    enqueue: vi.fn<JobQueue["enqueue"]>().mockResolvedValue(undefined),
+    dequeue: vi.fn<JobQueue["dequeue"]>().mockResolvedValue(undefined),
+  };
+}
+
 function createRetrySetup() {
   const job: Job = {
     id: "retry-job",
@@ -28,19 +34,72 @@ function createRetrySetup() {
   };
   const fetchMock = vi.fn<typeof fetch>();
   vi.stubGlobal("fetch", fetchMock);
+  const deadLetterQueue = createDeadLetterQueueMock();
   return {
     job,
+    deadLetterQueue,
     repository,
     queue,
     fetchMock,
-    worker: new JobWorker(repository, queue),
+    worker: new JobWorker(repository, queue, deadLetterQueue),
   };
 }
+
+test.each([400, 404, 429])(
+  "JobWorker.processNextJob should dead-letter HTTP %i without retrying",
+  async (status) => {
+    const { job, repository, queue, deadLetterQueue, fetchMock, worker } =
+      createRetrySetup();
+    fetchMock.mockResolvedValue(new Response(null, { status }));
+
+    await worker.processNextJob();
+
+    expect(repository.updateStatus.mock.calls).toEqual([
+      [job.id, "PROCESSING", 1],
+      [job.id, "FAILED", 1],
+    ]);
+    expect(queue.enqueue).not.toHaveBeenCalled();
+    expect(deadLetterQueue.enqueue).toHaveBeenCalledTimes(1);
+    expect(deadLetterQueue.enqueue).toHaveBeenCalledWith(job.id);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  },
+);
+
+test.each([0, 2])(
+  "JobWorker.processNextJob should propagate dead-letter enqueue failure with %i prior attempts",
+  async (attempts) => {
+    const { job, repository, queue, deadLetterQueue, fetchMock, worker } =
+      createRetrySetup();
+    job.attempts = attempts;
+    if (attempts === 0) {
+      job.type = "UNSUPPORTED";
+    } else {
+      fetchMock.mockRejectedValue(new Error("Network failure"));
+    }
+    const queueError = new Error("Dead-letter queue unavailable");
+    deadLetterQueue.enqueue.mockRejectedValue(queueError);
+
+    await expect(worker.processNextJob()).rejects.toBe(queueError);
+
+    expect(repository.updateStatus).toHaveBeenLastCalledWith(
+      job.id,
+      "FAILED",
+      attempts + 1,
+    );
+    expect(queue.enqueue).not.toHaveBeenCalled();
+    expect(deadLetterQueue.enqueue).toHaveBeenCalledTimes(1);
+    expect(deadLetterQueue.enqueue).toHaveBeenCalledWith(job.id);
+    expect(repository.updateStatus.mock.invocationCallOrder[1]).toBeLessThan(
+      deadLetterQueue.enqueue.mock.invocationCallOrder[0],
+    );
+  },
+);
 
 test.each(["HTTP error", "network error"])(
   "JobWorker.processNextJob should stop retrying after three attempts for %s",
   async (failure) => {
-    const { job, repository, queue, fetchMock, worker } = createRetrySetup();
+    const { job, repository, queue, deadLetterQueue, fetchMock, worker } =
+      createRetrySetup();
     if (failure === "HTTP error") {
       fetchMock.mockResolvedValue(new Response(null, { status: 500 }));
     } else {
@@ -63,18 +122,24 @@ test.each(["HTTP error", "network error"])(
         attempt,
       );
       expect(queue.enqueue).toHaveBeenCalledTimes(Math.min(attempt, 2));
+      expect(deadLetterQueue.enqueue).toHaveBeenCalledTimes(
+        attempt === 3 ? 1 : 0,
+      );
     }
 
     expect(repository.updateStatus).toHaveBeenCalledTimes(6);
     expect(queue.enqueue.mock.calls).toEqual([[job.id], [job.id]]);
     expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(deadLetterQueue.enqueue).toHaveBeenCalledWith(job.id);
+    expect(deadLetterQueue.dequeue).not.toHaveBeenCalled();
   },
 );
 
 test.each([2, 3])(
   "JobWorker.processNextJob should complete on attempt %i without requeueing again",
   async (successfulAttempt) => {
-    const { job, repository, queue, fetchMock, worker } = createRetrySetup();
+    const { job, repository, queue, deadLetterQueue, fetchMock, worker } =
+      createRetrySetup();
     for (let attempt = 1; attempt < successfulAttempt; attempt++) {
       fetchMock.mockRejectedValueOnce(new Error("Temporary network failure"));
     }
@@ -84,6 +149,7 @@ test.each([2, 3])(
       await worker.processNextJob();
     }
 
+    expect(deadLetterQueue.enqueue).not.toHaveBeenCalled();
     expect(job.attempts).toBe(successfulAttempt);
     expect(fetchMock).toHaveBeenCalledTimes(successfulAttempt);
     expect(queue.enqueue).toHaveBeenCalledTimes(successfulAttempt - 1);
@@ -101,7 +167,8 @@ test.each([2, 3])(
 );
 
 test("JobWorker.processNextJob should propagate an enqueue failure when retrying", async () => {
-  const { job, repository, queue, fetchMock, worker } = createRetrySetup();
+  const { job, repository, queue, deadLetterQueue, fetchMock, worker } =
+    createRetrySetup();
   const queueError = new Error("Queue unavailable");
   fetchMock.mockRejectedValue(new Error("Network failure"));
   queue.enqueue.mockRejectedValue(queueError);
@@ -111,6 +178,7 @@ test("JobWorker.processNextJob should propagate an enqueue failure when retrying
   expect(job.attempts).toBe(1);
   expect(queue.enqueue).toHaveBeenCalledTimes(1);
   expect(queue.enqueue).toHaveBeenCalledWith(job.id);
+  expect(deadLetterQueue.enqueue).not.toHaveBeenCalled();
   expect(repository.updateStatus.mock.calls).toEqual([
     [job.id, "PROCESSING", 1],
     [job.id, "PENDING", 1],
@@ -128,7 +196,12 @@ test("JobWorker.processNextJob should return without fetching on empty queue", a
   };
   const fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
-  const jobWorker = new JobWorker(jobRepositoryMock, jobQueueMock);
+  const deadLetterQueue = createDeadLetterQueueMock();
+  const jobWorker = new JobWorker(
+    jobRepositoryMock,
+    jobQueueMock,
+    deadLetterQueue,
+  );
 
   const result = await jobWorker.processNextJob();
 
@@ -138,6 +211,8 @@ test("JobWorker.processNextJob should return without fetching on empty queue", a
   expect(jobRepositoryMock.updateStatus).not.toHaveBeenCalled();
   expect(fetchMock).not.toHaveBeenCalled();
   expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
+  expect(deadLetterQueue.enqueue).not.toHaveBeenCalled();
+  expect(deadLetterQueue.dequeue).not.toHaveBeenCalled();
 });
 
 test("JobWorker.processNextJob status should remain PROCESSING while fetch is pending", async () => {
@@ -168,7 +243,12 @@ test("JobWorker.processNextJob status should remain PROCESSING while fetch is pe
 
   const fetchMock = vi.fn().mockReturnValue(pendingFetch);
   vi.stubGlobal("fetch", fetchMock);
-  const jobWorker = new JobWorker(jobRepositoryMock, jobQueueMock);
+  const deadLetterQueue = createDeadLetterQueueMock();
+  const jobWorker = new JobWorker(
+    jobRepositoryMock,
+    jobQueueMock,
+    deadLetterQueue,
+  );
 
   const processPromise = jobWorker.processNextJob();
 
@@ -187,6 +267,8 @@ test("JobWorker.processNextJob status should remain PROCESSING while fetch is pe
     [job.id, "COMPLETED", 1],
   ]);
   expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
+  expect(deadLetterQueue.enqueue).not.toHaveBeenCalled();
+  expect(deadLetterQueue.dequeue).not.toHaveBeenCalled();
 });
 
 test("JobWorker.processNextJob should requeue the job as PENDING for invalid HTTP response", async () => {
@@ -217,7 +299,12 @@ test("JobWorker.processNextJob should requeue the job as PENDING for invalid HTT
   });
   vi.stubGlobal("fetch", fetchMock);
 
-  const jobWorker = new JobWorker(jobRepositoryMock, jobQueueMock);
+  const deadLetterQueue = createDeadLetterQueueMock();
+  const jobWorker = new JobWorker(
+    jobRepositoryMock,
+    jobQueueMock,
+    deadLetterQueue,
+  );
   await jobWorker.processNextJob();
 
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
@@ -227,6 +314,8 @@ test("JobWorker.processNextJob should requeue the job as PENDING for invalid HTT
   expect(job.attempts).toBe(1);
   expect(jobQueueMock.enqueue).toHaveBeenCalledTimes(1);
   expect(jobQueueMock.enqueue).toHaveBeenCalledWith(job.id);
+  expect(deadLetterQueue.enqueue).not.toHaveBeenCalled();
+  expect(deadLetterQueue.dequeue).not.toHaveBeenCalled();
 });
 
 test("JobWorker.processNextJob should requeue the job as PENDING when fetch is rejected", async () => {
@@ -253,7 +342,12 @@ test("JobWorker.processNextJob should requeue the job as PENDING when fetch is r
   const fetchMock = vi.fn().mockRejectedValue(new Error("Network failure"));
   vi.stubGlobal("fetch", fetchMock);
 
-  const jobWorker = new JobWorker(jobRepositoryMock, jobQueueMock);
+  const deadLetterQueue = createDeadLetterQueueMock();
+  const jobWorker = new JobWorker(
+    jobRepositoryMock,
+    jobQueueMock,
+    deadLetterQueue,
+  );
   await jobWorker.processNextJob();
 
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
@@ -263,6 +357,8 @@ test("JobWorker.processNextJob should requeue the job as PENDING when fetch is r
   expect(job.attempts).toBe(1);
   expect(jobQueueMock.enqueue).toHaveBeenCalledTimes(1);
   expect(jobQueueMock.enqueue).toHaveBeenCalledWith(job.id);
+  expect(deadLetterQueue.enqueue).not.toHaveBeenCalled();
+  expect(deadLetterQueue.dequeue).not.toHaveBeenCalled();
 });
 
 test("JobWorker.processNextJob should fail without retrying or fetching on invalid job type", async () => {
@@ -286,7 +382,12 @@ test("JobWorker.processNextJob should fail without retrying or fetching on inval
   };
   const fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
-  const jobWorker = new JobWorker(jobRepositoryMock, jobQueueMock);
+  const deadLetterQueue = createDeadLetterQueueMock();
+  const jobWorker = new JobWorker(
+    jobRepositoryMock,
+    jobQueueMock,
+    deadLetterQueue,
+  );
 
   await jobWorker.processNextJob();
 
@@ -298,6 +399,12 @@ test("JobWorker.processNextJob should fail without retrying or fetching on inval
   expect(fetchMock).not.toHaveBeenCalled();
   expect(job.attempts).toBe(1);
   expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
+  expect(deadLetterQueue.enqueue).toHaveBeenCalledTimes(1);
+  expect(deadLetterQueue.enqueue).toHaveBeenCalledWith(job.id);
+  expect(
+    jobRepositoryMock.updateStatus.mock.invocationCallOrder[1],
+  ).toBeLessThan(deadLetterQueue.enqueue.mock.invocationCallOrder[0]);
+  expect(deadLetterQueue.dequeue).not.toHaveBeenCalled();
 });
 
 test("JobWorker.processNextJob should fail without retrying or fetching when URL is missing", async () => {
@@ -321,7 +428,12 @@ test("JobWorker.processNextJob should fail without retrying or fetching when URL
   };
   const fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
-  const jobWorker = new JobWorker(jobRepositoryMock, jobQueueMock);
+  const deadLetterQueue = createDeadLetterQueueMock();
+  const jobWorker = new JobWorker(
+    jobRepositoryMock,
+    jobQueueMock,
+    deadLetterQueue,
+  );
 
   await jobWorker.processNextJob();
 
@@ -333,6 +445,12 @@ test("JobWorker.processNextJob should fail without retrying or fetching when URL
   expect(fetchMock).not.toHaveBeenCalled();
   expect(job.attempts).toBe(1);
   expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
+  expect(deadLetterQueue.enqueue).toHaveBeenCalledTimes(1);
+  expect(deadLetterQueue.enqueue).toHaveBeenCalledWith(job.id);
+  expect(
+    jobRepositoryMock.updateStatus.mock.invocationCallOrder[1],
+  ).toBeLessThan(deadLetterQueue.enqueue.mock.invocationCallOrder[0]);
+  expect(deadLetterQueue.dequeue).not.toHaveBeenCalled();
 });
 
 test("JobWorker.processNextJob should fail without retrying or fetching on non-string URL", async () => {
@@ -356,7 +474,12 @@ test("JobWorker.processNextJob should fail without retrying or fetching on non-s
   };
   const fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
-  const jobWorker = new JobWorker(jobRepositoryMock, jobQueueMock);
+  const deadLetterQueue = createDeadLetterQueueMock();
+  const jobWorker = new JobWorker(
+    jobRepositoryMock,
+    jobQueueMock,
+    deadLetterQueue,
+  );
 
   await jobWorker.processNextJob();
 
@@ -368,6 +491,12 @@ test("JobWorker.processNextJob should fail without retrying or fetching on non-s
   expect(fetchMock).not.toHaveBeenCalled();
   expect(job.attempts).toBe(1);
   expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
+  expect(deadLetterQueue.enqueue).toHaveBeenCalledTimes(1);
+  expect(deadLetterQueue.enqueue).toHaveBeenCalledWith(job.id);
+  expect(
+    jobRepositoryMock.updateStatus.mock.invocationCallOrder[1],
+  ).toBeLessThan(deadLetterQueue.enqueue.mock.invocationCallOrder[0]);
+  expect(deadLetterQueue.dequeue).not.toHaveBeenCalled();
 });
 
 test("JobWorker.processNextJob should return missing job error when job ID is unknown", async () => {
@@ -381,7 +510,12 @@ test("JobWorker.processNextJob should return missing job error when job ID is un
   };
   const fetchMock = vi.fn();
   vi.stubGlobal("fetch", fetchMock);
-  const jobWorker = new JobWorker(jobRepositoryMock, jobQueueMock);
+  const deadLetterQueue = createDeadLetterQueueMock();
+  const jobWorker = new JobWorker(
+    jobRepositoryMock,
+    jobQueueMock,
+    deadLetterQueue,
+  );
 
   await expect(jobWorker.processNextJob()).rejects.toThrow(
     "Job with ID unknown-id not found",
@@ -391,6 +525,8 @@ test("JobWorker.processNextJob should return missing job error when job ID is un
   expect(jobRepositoryMock.updateStatus).not.toHaveBeenCalled();
   expect(fetchMock).not.toHaveBeenCalled();
   expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
+  expect(deadLetterQueue.enqueue).not.toHaveBeenCalled();
+  expect(deadLetterQueue.dequeue).not.toHaveBeenCalled();
 });
 
 test("JobWorker.processNextJob should process only one queued job", async () => {
@@ -426,7 +562,12 @@ test("JobWorker.processNextJob should process only one queued job", async () => 
   };
   const fetchMock = vi.fn().mockResolvedValue({ ok: true });
   vi.stubGlobal("fetch", fetchMock);
-  const jobWorker = new JobWorker(jobRepositoryMock, jobQueueMock);
+  const deadLetterQueue = createDeadLetterQueueMock();
+  const jobWorker = new JobWorker(
+    jobRepositoryMock,
+    jobQueueMock,
+    deadLetterQueue,
+  );
 
   await jobWorker.processNextJob();
 
@@ -456,6 +597,8 @@ test("JobWorker.processNextJob should process only one queued job", async () => 
     [secondJob.id, "COMPLETED", 1],
   ]);
   expect(jobQueueMock.enqueue).not.toHaveBeenCalled();
+  expect(deadLetterQueue.enqueue).not.toHaveBeenCalled();
+  expect(deadLetterQueue.dequeue).not.toHaveBeenCalled();
 });
 
 test("JobWorker.processNextJob should process the next job while a failed attempt awaits retry", async () => {
@@ -494,7 +637,12 @@ test("JobWorker.processNextJob should process the next job while a failed attemp
     .mockRejectedValueOnce(new Error("Network failure"))
     .mockResolvedValueOnce({ ok: true });
   vi.stubGlobal("fetch", fetchMock);
-  const jobWorker = new JobWorker(jobRepositoryMock, jobQueueMock);
+  const deadLetterQueue = createDeadLetterQueueMock();
+  const jobWorker = new JobWorker(
+    jobRepositoryMock,
+    jobQueueMock,
+    deadLetterQueue,
+  );
 
   await expect(jobWorker.processNextJob()).resolves.toBeUndefined();
   expect(jobRepositoryMock.updateStatus.mock.calls).toEqual([
@@ -521,4 +669,6 @@ test("JobWorker.processNextJob should process the next job while a failed attemp
   expect(job.attempts).toBe(1);
   expect(jobQueueMock.enqueue).toHaveBeenCalledTimes(1);
   expect(jobQueueMock.enqueue).toHaveBeenCalledWith(job.id);
+  expect(deadLetterQueue.enqueue).not.toHaveBeenCalled();
+  expect(deadLetterQueue.dequeue).not.toHaveBeenCalled();
 });
