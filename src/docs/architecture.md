@@ -38,3 +38,23 @@ a worker allows longer-running jobs to be processed asynchronously
 - Terraform makes the infrastructure reproducible
 - Observability becomes necessary once jobs run across distributed components
 - Deployment automation becomes valuable once infrastructure and environments exist
+
+## Expected Production Behaviour
+
+- The API accepts a job request, validates it and stores the job with an initial `PENDING` status.
+- The job ID is published to the queue for asynchronous processing.
+- The API returns without waiting for the job to complete.
+- A worker consumes queued jobs and updates their status to `PROCESSING`.
+- Successful jobs are marked `COMPLETED`.
+- Retryable failures are re-enqueued until the maximum attempt count is reached.
+- Permanent failures and exhausted retries are marked `FAILED` and sent to the dead-letter queue.
+- Job state is persisted outside the application process so that restarts do not lose submitted jobs.
+- Logs and metrics should make it possible to trace job processing and identify failed or delayed jobs.
+
+## Failure Scenarios and Recovery
+
+- Invalid job payloads and HTTP 4xx errors are treated as permanent failures and are marked `FAILED` without retry.
+- Retryable processing failures, such as network errors, timeouts or HTTP 5xx responses, are re-enqueued while attempts remain.
+- Jobs that exhaust the maximum number of attempts are marked `FAILED` and sent to the dead-letter queue.
+- If the worker process stops unexpectedly, persisted job state and queued messages should allow processing to resume after restart.
+- Jobs in the dead-letter queue should be inspectable and, where appropriate, manually replayed after the underlying problem is corrected.

@@ -278,9 +278,9 @@ Stop container:
 - [ ] Add `docs/trade-offs.md` (continuously updated)
 - [ ] Add `docs/runbook.md` (continuously updated)
 - [x] Add architecture diagram
-- [ ] Add Architecture Decision Records under `docs/adr/` (after phase 6)
-- [ ] Document expected production behaviour (after phase 6)
-- [ ] Document failure scenarios and recovery approach (after phase 6)
+- [x] Add Architecture Decision Records under `docs/adr/` (continuously updated)
+- [x] Document expected production behaviour
+- [x] Document failure scenarios and recovery approach
 
 ### Phase 6: Event-driven processing design
 
