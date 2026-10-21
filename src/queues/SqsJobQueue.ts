@@ -17,17 +17,6 @@ export class SqsJobQueue implements JobQueue {
         );
     }
 
-    // async dequeue(): Promise<string | undefined> {
-    //     const response = await this.client.send(
-    //         new ReceiveMessageCommand({
-    //             QueueUrl: this.queueUrl,
-    //             MaxNumberOfMessages: 1,
-    //             WaitTimeSeconds: 20
-    //         }),
-    //     );
-    //     return response.Messages?.[0]?.Body;
-    // }
-
     async receive(): Promise<ReceivedJobMessage | undefined> {
         const received = await this.client.send(
             new ReceiveMessageCommand({

@@ -30,7 +30,6 @@ export interface ReceivedJobMessage {
 
 export interface JobQueue {
   enqueue(jobId: string): Promise<void>;
-  //dequeue(): Promise<string | undefined>;
   receive(): Promise<ReceivedJobMessage | undefined>;
   acknowledge(receiptHandle: string): Promise<void>;
 }
