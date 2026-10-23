@@ -1,4 +1,4 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import request from "supertest";
 
 let app: typeof import("../app").app;
@@ -6,7 +6,14 @@ let app: typeof import("../app").app;
 beforeEach(async () => {
   // Routes own the in-memory repository, so reload them for each test.
   vi.resetModules();
+  vi.stubEnv("USE_SQS", "false");
+  vi.stubEnv("QUEUE_URL", undefined);
+  vi.stubEnv("DLQ_URL", undefined);
   ({ app } = await import("../app"));
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
 });
 
 test("GET /health should return status ok", async () => {
