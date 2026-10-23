@@ -293,7 +293,7 @@ Stop container:
 
 ### Phase 7: AWS services integration
 
-- [ ] Add AWS SQS for job messages
+- [x] Add AWS SQS for job messages
 - [ ] Add DynamoDB for job status and results
 - [ ] Add S3 for optional job outputs or artifacts
 - [ ] Add IAM permission considerations

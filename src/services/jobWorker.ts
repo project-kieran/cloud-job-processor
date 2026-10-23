@@ -7,8 +7,8 @@ export class JobWorker {
       JobRepository,
       "findById" | "updateStatus"
     >,
-    private readonly queue: Pick<JobQueue, "enqueue" | "dequeue">,
-    private readonly deadLetterQueue: Pick<JobQueue, "enqueue" | "dequeue">
+    private readonly queue: Pick<JobQueue, "enqueue" | "receive" | "acknowledge">,
+    private readonly deadLetterQueue: Pick<JobQueue, "enqueue">
   ) {}
 
   private async processJob(job: Job): Promise<void> {
@@ -39,16 +39,18 @@ export class JobWorker {
   }
 
   async processNextJob(): Promise<void> {
-    const jobId = await this.queue.dequeue();
+    const message = await this.queue.receive();
 
-    if (!jobId) {
+    if (!message) {
       return;
     }
 
-    const job = this.repository.findById(jobId);
+    const job = this.repository.findById(message.jobId);
     
     if (!job) {
-      throw new JobProcessingError(`Job with ID ${jobId} not found`, false);
+      await this.deadLetterQueue.enqueue(message.jobId);
+      await this.queue.acknowledge(message.receiptHandle);
+      return;
     }
 
     job.attempts++;
@@ -57,6 +59,7 @@ export class JobWorker {
       this.repository.updateStatus(job.id, "PROCESSING", job.attempts);
       await this.processJob(job);
       this.repository.updateStatus(job.id, "COMPLETED", job.attempts);
+      await this.queue.acknowledge(message.receiptHandle);
     } catch (error) {
       if (
         error instanceof JobProcessingError &&
@@ -64,9 +67,11 @@ export class JobWorker {
         job.attempts < maxAttempts){
           this.repository.updateStatus(job.id, "PENDING", job.attempts);
           await this.queue.enqueue(job.id);
+          await this.queue.acknowledge(message.receiptHandle);
       } else {
           this.repository.updateStatus(job.id, "FAILED", job.attempts);
           await this.deadLetterQueue.enqueue(job.id);
+          await this.queue.acknowledge(message.receiptHandle);
       }
     }
   }

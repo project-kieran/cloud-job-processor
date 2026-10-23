@@ -23,7 +23,13 @@ export interface CreateJobRequest {
   payload: Record<string, unknown>;
 }
 
+export interface ReceivedJobMessage {
+  jobId: string;
+  receiptHandle: string;
+}
+
 export interface JobQueue {
   enqueue(jobId: string): Promise<void>;
-  dequeue(): Promise<string | undefined>;
+  receive(): Promise<ReceivedJobMessage | undefined>;
+  acknowledge(receiptHandle: string): Promise<void>;
 }

@@ -47,9 +47,14 @@ test("Job processing should isolate dead-lettered jobs and continue processing t
     attempts: 1,
   });
   expect(fetchMock).toHaveBeenCalledTimes(1);
-  await expect(queue.dequeue()).resolves.toBeUndefined();
-  await expect(deadLetterQueue.dequeue()).resolves.toBe(invalidJob.id);
-  await expect(deadLetterQueue.dequeue()).resolves.toBeUndefined();
+  await expect(queue.receive()).resolves.toBeUndefined();
+  const message = await deadLetterQueue.receive();
+  expect(message).toEqual({
+    jobId: invalidJob.id,
+    receiptHandle: expect.any(String),
+  });
+  await deadLetterQueue.acknowledge(message!.receiptHandle);
+  await expect(deadLetterQueue.receive()).resolves.toBeUndefined();
 });
 
 test("Job processing should make created job retrievable with COMPLETED status", async () => {
@@ -82,7 +87,7 @@ test("Job processing should make created job retrievable with COMPLETED status",
   expect(fetchMock).toHaveBeenCalledWith(request.payload.url, {
     signal: expect.any(AbortSignal),
   });
-  await expect(deadLetterQueue.dequeue()).resolves.toBeUndefined();
+  await expect(deadLetterQueue.receive()).resolves.toBeUndefined();
 });
 
 test("Job processing should mark a job FAILED after exhausting retries for HTTP 500", async () => {
@@ -137,8 +142,13 @@ test("Job processing should mark a job FAILED after exhausting retries for HTTP 
     status: "FAILED",
     attempts: 3,
   });
-  await expect(deadLetterQueue.dequeue()).resolves.toBe(createdJob.id);
-  await expect(deadLetterQueue.dequeue()).resolves.toBeUndefined();
+  const message = await deadLetterQueue.receive();
+  expect(message).toEqual({
+    jobId: createdJob.id,
+    receiptHandle: expect.any(String),
+  });
+  await deadLetterQueue.acknowledge(message!.receiptHandle);
+  await expect(deadLetterQueue.receive()).resolves.toBeUndefined();
 });
 
 test("Job processing should process jobs in submission order", async () => {
@@ -190,7 +200,7 @@ test("Job processing should process jobs in submission order", async () => {
     signal: expect.any(AbortSignal),
   });
   expect(fetchMock).toHaveBeenCalledTimes(2);
-  await expect(deadLetterQueue.dequeue()).resolves.toBeUndefined();
+  await expect(deadLetterQueue.receive()).resolves.toBeUndefined();
 });
 
 test("Job processing should store a job before consumer can process queued ID", async () => {
@@ -230,5 +240,5 @@ test("Job processing should store a job before consumer can process queued ID", 
   expect(fetchMock).toHaveBeenCalledWith(request.payload.url, {
     signal: expect.any(AbortSignal),
   });
-  await expect(deadLetterQueue.dequeue()).resolves.toBeUndefined();
+  await expect(deadLetterQueue.receive()).resolves.toBeUndefined();
 });
